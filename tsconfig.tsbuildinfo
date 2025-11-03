@@ -1,1 +1,1 @@
-{"root":["./src/index.ts","./src/routes/auth/index.ts"],"version":"5.8.3"}
+{"root":["./src/index.ts","./src/middleware/auth.ts","./src/prisma/client.ts","./src/routes/auth/index.ts","./src/types/authencatedrequest.ts","./src/utils/generateotp.ts","./src/utils/jwt.ts","./src/utils/sendsms.ts"],"version":"5.8.3"}
