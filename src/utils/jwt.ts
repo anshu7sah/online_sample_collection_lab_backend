@@ -1,22 +1,28 @@
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
-export function generateToken(userId: string) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
+/**
+ * Generate token with optional extra payload and custom options.
+ */
+export function generateToken(
+  userId: string,
+  extraPayload: Record<string, any> = {},
+  options: SignOptions = {}
+) {
+  return jwt.sign({ userId, ...extraPayload }, JWT_SECRET, {
+    expiresIn: options.expiresIn || "7d",
+    ...options,
+  });
 }
 
-export function verifyToken(token: string): { userId: string } | null {
+export function verifyToken(
+  token: string
+): (JwtPayload & { userId: string }) | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    if (typeof decoded === "string") {
-      // This happens rarely, only if you signed a raw string instead of an object
-      return null;
-    }
-
-    // ✅ decoded is a JwtPayload here
-    return { userId: (decoded as JwtPayload).userId as string };
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    if (!decoded.userId) return null;
+    return decoded as JwtPayload & { userId: string };
   } catch {
     return null;
   }

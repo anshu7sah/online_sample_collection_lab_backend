@@ -1,11 +1,19 @@
 model User {
-  id          String   @id @default(cuid())
-  mobile      String   @unique
-  name        String?
-  dob         DateTime?
-  otpCode     String?    // latest OTP (null after use)
-  otpExpires  DateTime?  // expiry timestamp (null after use)
-  isProfileComplete Boolean @default(false) // true after name + dob are filled
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id     String    @id @default(cuid())
+  mobile String    @unique
+  name   String?
+  dob    DateTime?
+
+  // change this ↓
+  otpHash    String? // store HMAC hash of OTP instead of raw OTP
+  otpExpires DateTime? // expiry timestamp
+
+  otpAttempts Int       @default(0) // count wrong attempts
+  isLocked    Boolean   @default(false)
+  lockedAt    DateTime? // optional – when account was locked
+
+  isProfileComplete Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

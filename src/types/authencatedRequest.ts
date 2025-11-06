@@ -6,5 +6,6 @@ export interface AuthenticatedRequest extends Request {
     mobile: string;
     name: string | null;
     dob: Date | null;
+    isNew: Boolean;
   };
 }

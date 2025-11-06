@@ -35,6 +35,7 @@ export const authMiddleware = async (
       mobile: user.mobile,
       dob: user.dob,
       name: user.name,
+      isNew: user.isProfileComplete ? false : true,
     };
     next();
   } catch (error) {
