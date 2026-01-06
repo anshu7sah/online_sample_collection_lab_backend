@@ -1,0 +1,16 @@
+POST http://localhost:5000/api/auth/send-otp
+Content-Type: application/json
+
+{
+  "mobile": "9840868872"
+}
+
+###
+
+POST http://localhost:5000/api/auth/verify-otp
+Content-Type: application/json
+
+{
+  "mobile": "9840868872",
+  "otp": "468942"
+}

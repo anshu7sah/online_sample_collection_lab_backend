@@ -1,18 +1,23 @@
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
   id     String    @id @default(cuid())
   mobile String    @unique
   name   String?
   dob    DateTime?
 
-  // change this ↓
-  otpHash    String? // store HMAC hash of OTP instead of raw OTP
-  otpExpires DateTime? // expiry timestamp
-
-  otpAttempts Int       @default(0) // count wrong attempts
+  otpHash     String?
+  otpExpires  DateTime?
+  otpAttempts Int       @default(0)
   isLocked    Boolean   @default(false)
-  lockedAt    DateTime? // optional – when account was locked
+  lockedAt    DateTime?
 
   isProfileComplete Boolean @default(false)
+
+  role Role @default(USER) // <-- new field
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

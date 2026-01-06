@@ -71,6 +71,7 @@ router.post(
         otpAttempts: 0,
         isLocked: false,
         isProfileComplete: false,
+        role: "USER",
       },
     });
 
@@ -193,7 +194,7 @@ router.post("/signup", async (req: Request, res: Response) => {
 /**
  * CURRENT USER
  */
-router.get("/current", authMiddleware, (req: any, res: Response) => {
+router.get("/current", authMiddleware(), (req: any, res: Response) => {
   res.json({ user: req.user });
 });
 
