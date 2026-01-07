@@ -1,0 +1,18 @@
+model Test {
+    id                 Int     @id @default(autoincrement())
+    department         String
+    testCode           String
+    testName           String
+    amount             Float
+    methodName         String
+    specimen           String
+    specimenVolume     String
+    container          String
+    reported           String
+    specialInstruction String?
+
+    packages PackageOnTest[] // relation table
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}

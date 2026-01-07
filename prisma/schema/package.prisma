@@ -1,0 +1,11 @@
+model Package {
+    id          Int     @id @default(autoincrement())
+    name        String
+    description String?
+    price       Float
+
+    tests PackageOnTest[] // relation table
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}

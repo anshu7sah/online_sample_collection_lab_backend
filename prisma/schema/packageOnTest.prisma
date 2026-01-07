@@ -1,0 +1,10 @@
+// Relation table (many-to-many)
+model PackageOnTest {
+    id        Int     @id @default(autoincrement())
+    package   Package @relation(fields: [packageId], references: [id])
+    packageId Int
+    test      Test    @relation(fields: [testId], references: [id])
+    testId    Int
+
+    @@unique([packageId, testId])
+}
