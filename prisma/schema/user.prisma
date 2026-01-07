@@ -15,6 +15,10 @@ model User {
   isLocked    Boolean   @default(false)
   lockedAt    DateTime?
 
+  // Admin login
+  email        String? @unique
+  passwordHash String?
+
   isProfileComplete Boolean @default(false)
 
   role Role @default(USER) // <-- new field

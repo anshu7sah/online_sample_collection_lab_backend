@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { generateToken, verifyToken } from "../../utils/jwt";
 import { generateNumericOtp, hashOtp } from "../../utils/generateOtp";
 import { authMiddleware } from "../../middleware/auth";
+import { hashPassword, verifyPassword } from "../../utils/password";
 
 const router = express.Router();
 
@@ -167,7 +168,7 @@ router.post("/signup", async (req: Request, res: Response) => {
   const payload = verifyToken(token);
   if (!payload) return res.status(403).json({ message: "Invalid token" });
 
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+  const user = await prisma.user.findUnique({ where: { id: +payload.userId } });
   if (!user) return res.status(404).json({ message: "User not found" });
 
   if (!name || !dob)
@@ -197,5 +198,89 @@ router.post("/signup", async (req: Request, res: Response) => {
 router.get("/current", authMiddleware(), (req: any, res: Response) => {
   res.json({ user: req.user });
 });
+
+
+
+/**
+ * ADMIN LOGIN
+ */
+router.post("/admin/login", async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password)
+      return res.status(400).json({ message: "Email and password required" });
+
+    const admin = await prisma.user.findFirst({
+      where: {
+        email,
+        role: "ADMIN",
+      },
+    });
+
+    if (!admin || !admin.passwordHash) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const isValid = verifyPassword(password, admin.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const token = generateToken(
+      admin.id,
+      { role: "ADMIN", purpose: "access" },
+      { expiresIn: "12h" }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      admin: {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+      },
+    });
+  } catch (error) {
+    console.error("Admin Login Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+router.post("/admin/create", authMiddleware(["ADMIN"]), async (req: any, res) => {
+  const { name, email, password,mobile } = req.body;
+
+  if (!email || !password)
+    return res.status(400).json({ message: "Email & password required" });
+
+  const exists = await prisma.user.findUnique({ where: { email } });
+  if (exists) return res.status(409).json({ message: "Admin already exists" });
+
+  const admin = await prisma.user.create({
+    data: {
+      mobile,
+      name,
+      email,
+      passwordHash: hashPassword(password),
+      role: "ADMIN",
+      isProfileComplete: true,
+    },
+  });
+
+  res.status(201).json({
+    success: true,
+    admin: {
+      id: admin.id,
+      email: admin.email,
+      role: admin.role,
+    },
+  });
+});
+
+
+
+
 
 export default router;

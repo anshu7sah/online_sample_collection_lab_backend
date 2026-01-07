@@ -6,7 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
  * Generate token with optional extra payload and custom options.
  */
 export function generateToken(
-  userId: string,
+  userId: number,
   extraPayload: Record<string, any> = {},
   options: SignOptions = {}
 ) {
