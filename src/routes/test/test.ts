@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { authMiddleware } from "../../middleware/auth";
 import { AuthenticatedRequest } from "../../types/authencatedRequest";
 import prisma from "../../prisma/client";
+import qs from "qs";
 
 
 const router = Router();
@@ -47,20 +48,59 @@ router.post("/", authMiddleware(["ADMIN"]), async (req: AuthenticatedRequest, re
 
 // ----------------------------------
 // Get all tests (for authenticated users) with pagination
+
+
 router.get("/", authMiddleware(), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
+    const query = req.query;
+
+
+    const whereClause: any = {};
+
+    // Fields that support string filtering
+    const stringFields = [
+      "department",
+      "testCode",
+      "testName",
+      "methodName",
+      "specimen",
+      "specimenVolume",
+      "container",
+      "reported",
+      "specialInstruction",
+    ];
+
+    stringFields.forEach(field => {
+      if (query[field]) {
+        whereClause[field] = {
+          contains: String(query[field]),
+          mode: "insensitive",
+        };
+      }
+    });
+
+    // Amount range filter
+    if (query.minAmount || query.maxAmount) {
+      whereClause.amount = {};
+      if (query.minAmount) whereClause.amount.gte = Number(query.minAmount);
+      if (query.maxAmount) whereClause.amount.lte = Number(query.maxAmount);
+      if (!Object.keys(whereClause.amount).length) delete whereClause.amount;
+    }
+
     const [tests, total] = await Promise.all([
       prisma.test.findMany({
+        where: whereClause,
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
       }),
-      prisma.test.count(),
+      prisma.test.count({ where: whereClause }),
     ]);
+
 
     res.json({
       tests,
@@ -76,6 +116,9 @@ router.get("/", authMiddleware(), async (req: AuthenticatedRequest, res: Respons
     res.status(500).json({ message: "Internal server error" });
   }
 });
+
+
+
 
 // ----------------------------------
 // Get single test by ID (for all authenticated users)
