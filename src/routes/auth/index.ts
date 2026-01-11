@@ -232,6 +232,12 @@ router.post("/admin/login", async (req: Request, res: Response) => {
       { role: "ADMIN", purpose: "access" },
       { expiresIn: "12h" }
     );
+    res.cookie("access_token", token, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+});
 
     return res.json({
       success: true,
@@ -279,6 +285,10 @@ router.post("/admin/create", authMiddleware(["ADMIN"]), async (req: any, res) =>
   });
 });
 
+router.get("/logout", authMiddleware(), (req: any, res: Response) => {
+  return res.clearCookie("token").json({ success: true });
+  
+})
 
 
 

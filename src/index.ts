@@ -7,16 +7,38 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import authRouter from "./routes/auth";
+import testRouter from "./routes/test/test";
+import packageRouter from "./routes/package/package"
+import cookieParser from "cookie-parser";
+
 
 const app = express();
 
 // ===== Middlewares =====
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
 
 // Security Middlewares
 app.use(helmet()); // Secure HTTP headers
-app.use(cors({ origin: "*", credentials: true }));
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://admin.yourdomain.com",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 100, // Limit each IP
@@ -27,6 +49,8 @@ rateLimit({
 app.use(morgan("dev"));
 
 app.use("/api/auth", authRouter);
+app.use("/api/tests", testRouter);
+app.use("/api/packages", packageRouter);
 
 // ===== Routes =====
 app.get("/", (req: Request, res: Response) => {
