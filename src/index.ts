@@ -10,6 +10,7 @@ import authRouter from "./routes/auth";
 import testRouter from "./routes/test/test";
 import packageRouter from "./routes/package/package"
 import cookieParser from "cookie-parser";
+import fileRouter from "./routes/filehandling";
 
 
 const app = express();
@@ -51,6 +52,7 @@ app.use(morgan("dev"));
 app.use("/api/auth", authRouter);
 app.use("/api/tests", testRouter);
 app.use("/api/packages", packageRouter);
+app.use("/api/filehandling", fileRouter);
 
 // ===== Routes =====
 app.get("/", (req: Request, res: Response) => {

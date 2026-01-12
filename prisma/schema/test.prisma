@@ -1,7 +1,7 @@
 model Test {
     id                 Int     @id @default(autoincrement())
     department         String
-    testCode           String
+    testCode           String  @unique
     testName           String
     amount             Float
     methodName         String
