@@ -120,13 +120,12 @@ router.post(
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
 
-      // Read all rows with header = 1 for raw array
       const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
         header: 1,
         defval: "",
       });
 
-      // Find header row containing all required headers
+      // Find header row
       const REQUIRED_HEADERS = Object.keys(HEADER_MAP);
       const headerRowIndex = rows.findIndex(row =>
         REQUIRED_HEADERS.every(header => (row as string[]).some(cell => normalize(cell) === normalize(header)))
@@ -140,7 +139,7 @@ router.post(
       const headerRow = rows[headerRowIndex] as string[];
       const dataRows = rows.slice(headerRowIndex + 1);
 
-      // Convert each row to object using header row
+      // Convert rows to objects
       const rawRows: ExcelRow[] = dataRows.map(row => {
         const obj: Record<string, unknown> = {};
         headerRow.forEach((key, i) => {
@@ -151,20 +150,27 @@ router.post(
 
       const errors: string[] = [];
       const validTests: Prisma.TestCreateManyInput[] = [];
+      let totalRows = 0;
+      let skippedRows = 0;
 
       for (const rawRow of rawRows) {
+        totalRows++;
+
         const row = normalizeRow(rawRow, HEADER_MAP);
 
-        // Skip rows without required fields
-        if (!row.testCode || !row.testName) continue;
-
-        // Validate amount
-        if (!row.amount || isNaN(Number(row.amount))) {
-          errors.push(`Invalid AMOUNT for Test Code ${row.testCode}`);
+        // Skip empty rows
+        if (!row.testCode || !row.testName) {
+          skippedRows++;
           continue;
         }
 
-        // Check unique testCode
+        // Validate amount
+        if (!row.amount || isNaN(Number(row.amount))) {
+          errors.push(`Row with Test Code ${row.testCode}: invalid AMOUNT`);
+          continue;
+        }
+
+        // Check uniqueness in database
         const exists = await prisma.test.findFirst({
           where: { testCode: String(row.testCode) },
           select: { id: true },
@@ -178,7 +184,7 @@ router.post(
         validTests.push({
           testCode: String(row.testCode),
           testName: String(row.testName),
-          department: String(row.department),
+          department: String(row.department || ""),
           amount: Number(row.amount),
           methodName: String(row.methodName || ""),
           specimen: String(row.specimen || ""),
@@ -189,22 +195,26 @@ router.post(
         });
       }
 
-      console.log("Valid Tests to Import:", validTests);
-      console.log("Errors Found:", errors);
-
-      if (errors.length) {
-        return res.status(400).json({ errors });
-      }
-
-      // Bulk insert
+      // Bulk insert valid tests
       await prisma.test.createMany({
         data: validTests,
         skipDuplicates: true,
       });
 
+      // Summary report
+      const report = {
+        totalRows,
+        uploaded: validTests.length,
+        skipped: skippedRows,
+        errors: errors.length,
+        errorDetails: errors,
+      };
+
+      console.log("Import Report:", report);
+
       res.json({
-        message: "Tests imported successfully",
-        imported: validTests.length,
+        message: "Import completed",
+        report,
       });
     } catch (error) {
       console.error("Import Tests Error:", error);
@@ -212,6 +222,7 @@ router.post(
     }
   }
 );
+
 
 
 
