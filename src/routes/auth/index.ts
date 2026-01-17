@@ -285,10 +285,21 @@ router.post("/admin/create", authMiddleware(["ADMIN"]), async (req: any, res) =>
   });
 });
 
-router.get("/logout", authMiddleware(), (req: any, res: Response) => {
-  return res.clearCookie("token").json({ success: true });
-  
-})
+router.post("/logout", authMiddleware(), (req:any, res:Response) => {
+  console.log("Logging out user:", req.user.id);
+
+  // Clear the cookie with matching options
+  res.clearCookie("access_token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/", // must match original cookie path
+  });
+
+  // Send a proper JSON response
+  res.status(200).json({ success: true });
+});
+
 
 
 
