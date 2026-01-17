@@ -77,14 +77,71 @@ router.get(
       const limit = Number(req.query.limit) || 10;
       const skip = (page - 1) * limit;
 
+      const query = req.query;
+
+      const whereClause: any = {};
+
+      // Package-level string filters
+      const stringFields = ["name", "description"];
+
+      stringFields.forEach((field) => {
+        if (query[field]) {
+          whereClause[field] = {
+            contains: String(query[field]),
+            mode: "insensitive",
+          };
+        }
+      });
+
+      // Test-level string filters (nested)
+      const testStringFields = [
+        "testName",
+        "testCode",
+        "department",
+        "methodName",
+        "specimen",
+        "specimenVolume",
+        "container",
+        "reported",
+        "specialInstruction",
+      ];
+
+      const testFilters: any = {};
+      testStringFields.forEach((field) => {
+        if (query[field]) {
+          testFilters[field] = {
+            contains: String(query[field]),
+            mode: "insensitive",
+          };
+        }
+      });
+
+     if (Object.keys(testFilters).length > 0) {
+  whereClause.tests = {
+    some: {
+      test: testFilters, // OR logic across tests
+    },
+  };
+}
+
+
+      // Price filter
+      if (query.minPrice || query.maxPrice) {
+        whereClause.price = {};
+        if (query.minPrice) whereClause.price.gte = Number(query.minPrice);
+        if (query.maxPrice) whereClause.price.lte = Number(query.maxPrice);
+        if (!Object.keys(whereClause.price).length) delete whereClause.price;
+      }
+
       const [packages, total] = await Promise.all([
         prisma.package.findMany({
           skip,
           take: limit,
           orderBy: { createdAt: "desc" },
+          where: whereClause,
           include: { tests: { include: { test: true } } },
         }),
-        prisma.package.count(),
+        prisma.package.count({ where: whereClause }),
       ]);
 
       res.json({
@@ -102,6 +159,7 @@ router.get(
     }
   }
 );
+
 
 /* =====================================================
    GET SINGLE PACKAGE (AUTH USERS)

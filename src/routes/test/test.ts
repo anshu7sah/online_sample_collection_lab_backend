@@ -117,6 +117,83 @@ router.get("/", authMiddleware(), async (req: AuthenticatedRequest, res: Respons
   }
 });
 
+router.get(
+  "/or-search",
+  authMiddleware(),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const skip = (page - 1) * limit;
+
+      const query = req.query;
+
+      const stringFields = [
+        "department",
+        "testCode",
+        "testName",
+        "methodName",
+        "specimen",
+        "specimenVolume",
+        "container",
+        "reported",
+        "specialInstruction",
+      ];
+
+      const orConditions: any[] = [];
+
+      // 🔹 Build OR conditions dynamically
+      stringFields.forEach(field => {
+        if (query[field]) {
+          orConditions.push({
+            [field]: {
+              contains: String(query[field]),
+              mode: "insensitive",
+            },
+          });
+        }
+      });
+
+      // 🔹 Amount range (still AND with OR block)
+      const whereClause: any = {};
+
+      if (orConditions.length > 0) {
+        whereClause.OR = orConditions;
+      }
+
+      if (query.minAmount || query.maxAmount) {
+        whereClause.amount = {};
+        if (query.minAmount) whereClause.amount.gte = Number(query.minAmount);
+        if (query.maxAmount) whereClause.amount.lte = Number(query.maxAmount);
+      }
+
+      const [tests, total] = await Promise.all([
+        prisma.test.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.test.count({ where: whereClause }),
+      ]);
+
+      res.json({
+        tests,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch (error) {
+      console.error("OR Search Tests Error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+
 
 
 
