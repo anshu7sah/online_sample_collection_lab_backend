@@ -30,6 +30,7 @@ router.post(
   "/send-otp",
   SEND_OTP_LIMITER,
   async (req: Request, res: Response) => {
+    console.log("OTP Request Body:", req.body);
     const { mobile } = req.body;
     if (!mobile) return res.status(400).json({ message: "Mobile required" });
 
