@@ -8,7 +8,8 @@ import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import authRouter from "./routes/auth";
 import testRouter from "./routes/test/test";
-import packageRouter from "./routes/package/package"
+import packageRouter from "./routes/package/package";
+import bookingRouter from "./routes/booking/index";
 import cookieParser from "cookie-parser";
 import fileRouter from "./routes/filehandling";
 
@@ -53,6 +54,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/tests", testRouter);
 app.use("/api/packages", packageRouter);
 app.use("/api/filehandling", fileRouter);
+app.use("/api/bookings", bookingRouter);
 
 // ===== Routes =====
 app.get("/", (req: Request, res: Response) => {

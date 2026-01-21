@@ -1,0 +1,58 @@
+enum BookingStatus {
+    SCHEDULED
+    SAMPLE_COLLECTED
+    COMPLETED
+    CANCELLED
+}
+
+enum PaymentMode {
+    PAY_LATER
+    ESEWA
+    KHALTI
+    BANK_TRANSFER
+}
+
+enum PaymentStatus {
+    PENDING
+    PAID
+    FAILED
+}
+
+model Booking {
+    id               Int      @id @default(autoincrement())
+    userId           Int
+    user             User     @relation(fields: [userId], references: [id])
+    name             String
+    age              Int
+    gender           String
+    mobile           String
+    address          String
+    latitude         Float
+    longitude        Float
+    date             DateTime // Scheduled date of booking
+    timeSlot         String // e.g., "08-09"
+    prcDoctor        String? // optional, post report consultation doctor
+    hasPrescription  Boolean  @default(false)
+    prescriptionFile String? // file name or URL
+    reportUrl        String? // report file URL after completion
+
+    paymentMode   PaymentMode? // COD, ESEWA, KHALTI, etc.
+    paymentStatus PaymentStatus @default(PENDING)
+
+    status    BookingStatus @default(SCHEDULED)
+    createdAt DateTime      @default(now())
+    updatedAt DateTime      @updatedAt
+
+    items BookingItem[]
+}
+
+model BookingItem {
+    id        Int     @id @default(autoincrement())
+    booking   Booking @relation(fields: [bookingId], references: [id])
+    bookingId Int
+    testId    Int?
+    packageId Int?
+    type      String // "test" | "package"
+    name      String
+    price     Float
+}
