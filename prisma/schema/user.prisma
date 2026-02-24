@@ -1,6 +1,7 @@
 enum Role {
   USER
   ADMIN
+  RIDER
 }
 
 model User {
@@ -15,15 +16,19 @@ model User {
   isLocked    Boolean   @default(false)
   lockedAt    DateTime?
 
-  // Admin login
   email        String? @unique
   passwordHash String?
 
   isProfileComplete Boolean @default(false)
 
-  role     Role      @default(USER) // <-- new field
+  role Role @default(USER)
+
+  rider    Rider?
   bookings Booking[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  approvedTransfers MoneyTransfer[] @relation("ApprovedTransfers")
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  moneyTransfers MoneyTransfer[]
 }

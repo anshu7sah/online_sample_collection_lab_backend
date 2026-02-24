@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from "../types/authencatedRequest";
  * Auth middleware with optional role check
  */
 export const authMiddleware =
-  (roles?: Array<"USER" | "ADMIN">) =>
+  (roles?: Array<"USER" | "ADMIN" | "RIDER">) =>
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       let token: string | undefined;

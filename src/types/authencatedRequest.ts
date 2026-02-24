@@ -6,6 +6,6 @@ export interface AuthenticatedRequest extends Request {
     dob?: Date | null;
     name?: string | null;
     isNew: boolean;
-    role?: "USER" | "ADMIN";
+    role?: "USER" | "ADMIN" | "RIDER";
   };
 }

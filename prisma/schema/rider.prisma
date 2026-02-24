@@ -1,0 +1,33 @@
+enum RiderStatus {
+    PENDING
+    APPROVED
+    REJECTED
+    SUSPENDED
+}
+
+model Rider {
+    id     Int  @id @default(autoincrement())
+    userId Int  @unique
+    user   User @relation(fields: [userId], references: [id])
+
+    phone String?
+
+    drivingLicenseUrl String?
+    labDegreeUrl      String?
+
+    status RiderStatus @default(PENDING)
+
+    rating        Float @default(0)
+    ratingCount   Int   @default(0)
+    totalBookings Int   @default(0)
+
+    walletBalance Decimal @default(0)
+
+    // Relations
+    bookings       Booking[]
+    moneyTransfers MoneyTransfer[]
+    ratings        Rating[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}

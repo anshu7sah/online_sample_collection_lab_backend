@@ -5,8 +5,25 @@ import { generateToken, verifyToken } from "../../utils/jwt";
 import { generateNumericOtp, hashOtp } from "../../utils/generateOtp";
 import { authMiddleware } from "../../middleware/auth";
 import { hashPassword, verifyPassword } from "../../utils/password";
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
+import streamifier from "streamifier";
+
 
 const router = express.Router();
+
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage,limits: { fileSize: 20 * 1024 * 1024 }, });
+
+// ----------------------
+// Configure Cloudinary
+// ----------------------
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 /**
  * Rate limits
@@ -157,9 +174,7 @@ router.post(
   }
 );
 
-/**
- * COMPLETE SIGNUP
- */
+
 router.post("/signup", async (req: Request, res: Response) => {
   const { name, dob } = req.body;
 
@@ -300,6 +315,123 @@ router.post("/logout", authMiddleware(), (req:any, res:Response) => {
   // Send a proper JSON response
   res.status(200).json({ success: true });
 });
+
+
+// Rider routes
+router.post(
+  "/rider/signup",
+  upload.fields([
+    { name: "drivingLicense", maxCount: 1 },
+    { name: "labDegree", maxCount: 1 },
+  ]),
+  async (req: any, res: Response) => {
+    try {
+      const {
+        name,
+        email,
+        dateOfBirth,
+        password,
+        confirmPassword,
+      } = req.body;
+
+      if (!name || !email || !password || !confirmPassword || !dateOfBirth) {
+        return res.status(400).json({ message: "All fields required" });
+      }
+
+      if (password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords do not match" });
+      }
+
+      const existing = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existing) {
+        return res.status(409).json({ message: "Email already registered" });
+      }
+
+      const drivingLicenseFile = req.files?.drivingLicense?.[0];
+      const labDegreeFile = req.files?.labDegree?.[0];
+
+      if (!drivingLicenseFile || !labDegreeFile) {
+        return res.status(400).json({
+          message: "Driving license and lab degree required",
+        });
+      }
+
+      // ----------------------
+      // Cloudinary Upload Helper
+      // ----------------------
+      const uploadToCloudinary = (
+        buffer: Buffer,
+        folder: string
+      ): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder },
+            (error, result) => {
+              if (result) resolve(result.secure_url);
+              else reject(error);
+            }
+          );
+          streamifier.createReadStream(buffer).pipe(stream);
+        });
+      };
+
+      // ----------------------
+      // Upload Files
+      // ----------------------
+      const drivingLicenseUrl = await uploadToCloudinary(
+        drivingLicenseFile.buffer,
+        "riders/driving-licenses"
+      );
+
+      const labDegreeUrl = await uploadToCloudinary(
+        labDegreeFile.buffer,
+        "riders/lab-degrees"
+      );
+
+      const hashedPassword = hashPassword(password);
+
+      // ----------------------
+      // Transaction
+      // ----------------------
+      const result = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            name,
+            email,
+            dob: new Date(dateOfBirth),
+            mobile: `rider_${Date.now()}`, // ⚠ consider making mobile optional in schema
+            passwordHash: hashedPassword,
+            role: "RIDER",
+            isProfileComplete: true,
+          },
+        });
+
+        const rider = await tx.rider.create({
+          data: {
+            userId: user.id,
+            drivingLicenseUrl,
+            labDegreeUrl,
+            status: "PENDING",
+          },
+        });
+
+        return { user, rider };
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Application submitted. Await admin approval.",
+        riderId: result.rider.id,
+      });
+    } catch (error) {
+      console.error("Rider Signup Error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
 
 
 
