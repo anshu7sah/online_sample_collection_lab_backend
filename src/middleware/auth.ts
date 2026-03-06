@@ -10,9 +10,11 @@ export const authMiddleware =
   (roles?: Array<"USER" | "ADMIN" | "RIDER">) =>
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
+
       let token: string | undefined;
 
       // 1️⃣ Check Authorization header (React Native, API clients)
+      console.log("Auth Middleware: Checking Authorization header");
       const authHeader = req.headers.authorization;
       if (authHeader?.startsWith("Bearer ")) {
         token = authHeader.split(" ")[1];
@@ -22,12 +24,14 @@ export const authMiddleware =
       if (!token && req.cookies?.access_token) {
         token = req.cookies.access_token;
       }
+      console.log("Auth Middleware: Token found:", !!token);
 
       if (!token) {
         return res.status(401).json({ message: "Unauthorized: Token missing" });
       }
 
       const decoded = verifyToken(token);
+      console.log("Auth Middleware: Token decoded:", !!decoded);
       if (!decoded) {
         return res.status(401).json({ message: "Invalid or expired token" });
       }
