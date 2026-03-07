@@ -189,7 +189,7 @@ router.get(
 // ─────────────────────────────────────────────
 router.get(
   "/notifications",
-  authMiddleware(["USER"]),
+  authMiddleware(["USER", "RIDER"]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.user!.id;
@@ -254,7 +254,7 @@ router.get(
 // ─────────────────────────────────────────────
 router.post(
   "/notifications/:id/read",
-  authMiddleware(["USER"]),
+  authMiddleware(["USER", "RIDER"]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.user!.id;
