@@ -49,6 +49,7 @@ router.post(
         timeSlot,
         prcDoctor,
         paymentMode,
+        couponCode,
       } = req.body;
 
       // ----------------------
@@ -72,48 +73,117 @@ router.post(
       }
 
       // ----------------------
-      // Create Booking
+      // Coupon Validation
       // ----------------------
-      const booking = await prisma.booking.create({
-        data: {
-          userId,
-          name,
-          age: Number(age),
-          gender,
-          mobile,
-          address,
-          latitude: Number(latitude),
-          longitude: Number(longitude),
-          date: new Date(date),
-          timeSlot,
-          prcDoctor: prcDoctor || null,
-          hasPrescription: !!prescriptionFileUrl,
-          prescriptionFile: prescriptionFileUrl || null,
-          paymentMode: paymentMode || null,
+      let appliedCoupon: any = null;
+      let discountAmount = 0;
 
-          // Add booking items
-          items: {
-            create: req.body.items?.map((item: any) => ({
-              type: item.type,
-              name: item.name,
-              price: Number(item.price),
-              testId: Number(item.testId) || null,
-              packageId: Number(item.packageId) || null,
-            })),
+      if (couponCode) {
+        const coupon = await prisma.coupon.findUnique({
+          where: { code: couponCode.toUpperCase() },
+        });
+
+        if (!coupon) {
+          return res.status(400).json({ message: "Invalid coupon code" });
+        }
+        if (!coupon.isActive) {
+          return res.status(400).json({ message: "Coupon is inactive" });
+        }
+        const now = new Date();
+        if (coupon.validFrom && coupon.validFrom > now) {
+          return res.status(400).json({ message: "Coupon is not yet valid" });
+        }
+        if (coupon.validUntil && coupon.validUntil < now) {
+          return res.status(400).json({ message: "Coupon has expired" });
+        }
+        if (coupon.usedCount >= coupon.maxUses) {
+          return res.status(400).json({ message: "Coupon usage limit reached" });
+        }
+
+        appliedCoupon = coupon;
+
+        // Calculate discount from items total
+        const itemsTotal = (req.body.items || []).reduce(
+          (sum: number, item: any) => sum + Number(item.price),
+          0
+        );
+
+        if (coupon.discountType === "PERCENTAGE") {
+          discountAmount = (itemsTotal * coupon.discountValue) / 100;
+        } else {
+          discountAmount = Math.min(coupon.discountValue, itemsTotal);
+        }
+      }
+
+      // ----------------------
+      // Create Booking (+ coupon update in transaction)
+      // ----------------------
+      const bookingData: any = {
+        userId,
+        name,
+        age: Number(age),
+        gender,
+        mobile,
+        address,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        date: new Date(date),
+        timeSlot,
+        prcDoctor: prcDoctor || null,
+        hasPrescription: !!prescriptionFileUrl,
+        prescriptionFile: prescriptionFileUrl || null,
+        paymentMode: paymentMode || null,
+        ...(appliedCoupon && {
+          couponId: appliedCoupon.id,
+          discountAmount: discountAmount,
+        }),
+        items: {
+          create: req.body.items?.map((item: any) => ({
+            type: item.type,
+            name: item.name,
+            price: Number(item.price),
+            testId: Number(item.testId) || null,
+            packageId: Number(item.packageId) || null,
+          })),
+        },
+      };
+
+      let booking;
+      if (appliedCoupon) {
+        // Use transaction to also increment coupon usedCount atomically
+        const [newBooking] = await prisma.$transaction([
+          prisma.booking.create({ data: bookingData, include: { items: true, coupon: true } }),
+          prisma.coupon.update({
+            where: { id: appliedCoupon.id },
+            data: { usedCount: { increment: 1 } },
+          }),
+        ]);
+        booking = newBooking;
+      } else {
+        booking = await prisma.booking.create({
+          data: bookingData,
+          include: { items: true },
+        });
+      }
+
+      res.status(201).json({
+        booking,
+        ...(appliedCoupon && {
+          couponApplied: {
+            code: appliedCoupon.code,
+            discountType: appliedCoupon.discountType,
+            discountValue: appliedCoupon.discountValue,
+            discountAmount,
           },
-        },
-        include: {
-          items: true,
-        },
+        }),
       });
-
-      res.status(201).json({ booking });
     } catch (error) {
       console.error("Create Booking Error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }
 );
+
 
 // GET /api/bookings/my?status=SCHEDULED&page=1&limit=10
 router.get(
@@ -181,6 +251,104 @@ router.get(
     }
   }
 );
+
+router.get("/my/:id/cancel", authMiddleware(["USER"]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = Number(req.params.id);
+      const userId = req.user?.id;
+
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const booking = await prisma.booking.findFirst({
+        where: { id: bookingId, userId },
+        include: {
+          items: true,
+        },
+      });
+
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if(booking.status !== "SCHEDULED"){
+        return res.status(400).json({ message: "Only scheduled bookings can be cancelled" });
+      }
+
+      const updated = await prisma.booking.update({
+        where: { id: bookingId },
+        data: { status: "CANCELLED" },
+      });
+
+      res.json({ booking: updated });
+  } catch (error) {
+    console.error("User Cancel Booking Error:", error);
+    res.status(500).json({ message: "Failed to cancel booking" });
+  }
+});
+
+// TODO: Allow rating only for completed bookings and only once per booking
+
+router.post("/my/:id/rating", authMiddleware(["USER"]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const userId = req.user?.id;
+    const { rating, comment } = req.body;
+
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: "Rating must be between 1 and 5" });
+    }
+
+    const booking = await prisma.booking.findFirst({
+      where: { id: bookingId, userId },
+    });
+
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.status !== "COMPLETED") {
+      return res.status(400).json({ message: "Only completed bookings can be rated" });
+    }
+    if (!booking.riderId) {
+      return res.status(400).json({ message: "No rider assigned to this booking" });
+    }
+
+    // Check if already rated
+    const existingRating = await prisma.rating.findUnique({
+      where: { bookingId_riderId: { bookingId, riderId: booking.riderId } },
+    });
+    if (existingRating) {
+      return res.status(409).json({ message: "You have already rated this booking" });
+    }
+
+    // Create rating and update rider's average in a transaction
+    const rider = await prisma.rider.findUnique({ where: { id: booking.riderId } });
+    if (!rider) return res.status(404).json({ message: "Rider not found" });
+
+    const newRatingCount = rider.ratingCount + 1;
+    const newAvgRating = (rider.rating * rider.ratingCount + Number(rating)) / newRatingCount;
+
+    const [newRating] = await prisma.$transaction([
+      prisma.rating.create({
+        data: {
+          bookingId,
+          riderId: booking.riderId,
+          rating: Number(rating),
+          comment: comment || null,
+        },
+      }),
+      prisma.rider.update({
+        where: { id: booking.riderId },
+        data: {
+          rating: newAvgRating,
+          ratingCount: newRatingCount,
+        },
+      }),
+    ]);
+
+    res.status(201).json({ message: "Rating submitted", rating: newRating });
+  } catch (error) {
+    console.error("Submit Rating Error:", error);
+    res.status(500).json({ message: "Failed to submit rating" });
+  }
+});
+
 
 router.get(
   "/",

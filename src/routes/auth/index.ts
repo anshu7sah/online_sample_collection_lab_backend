@@ -8,13 +8,15 @@ import { hashPassword, verifyPassword } from "../../utils/password";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import streamifier from "streamifier";
+import crypto from "crypto";
+import { sendEmail } from "../../utils/sendEmail";
 
 
 const router = express.Router();
 
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage,limits: { fileSize: 20 * 1024 * 1024 }, });
+const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 }, });
 
 // ----------------------
 // Configure Cloudinary
@@ -41,7 +43,32 @@ const VERIFY_OTP_LIMITER = rateLimit({
 });
 
 /**
- * SEND OTP
+ * @swagger
+ * /api/auth/send-otp:
+ *   post:
+ *     summary: Send OTP
+ *     description: Send OTP to mobile number for authentication
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - mobile
+ *             properties:
+ *               mobile:
+ *                 type: string
+ *                 description: Mobile number in E.164 format
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *       400:
+ *         description: Invalid mobile number
+ *       423:
+ *         description: Account locked
  */
 router.post(
   "/send-otp",
@@ -249,11 +276,11 @@ router.post("/admin/login", async (req: Request, res: Response) => {
       { expiresIn: "12h" }
     );
     res.cookie("access_token", token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-});
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     return res.json({
       success: true,
@@ -272,7 +299,7 @@ router.post("/admin/login", async (req: Request, res: Response) => {
 });
 
 router.post("/admin/create", authMiddleware(["ADMIN"]), async (req: any, res) => {
-  const { name, email, password,mobile } = req.body;
+  const { name, email, password, mobile } = req.body;
 
   if (!email || !password)
     return res.status(400).json({ message: "Email & password required" });
@@ -301,7 +328,7 @@ router.post("/admin/create", authMiddleware(["ADMIN"]), async (req: any, res) =>
   });
 });
 
-router.post("/logout", authMiddleware(), (req:any, res:Response) => {
+router.post("/logout", authMiddleware(), (req: any, res: Response) => {
   console.log("Logging out user:", req.user.id);
 
   // Clear the cookie with matching options
@@ -332,6 +359,7 @@ router.post(
         dateOfBirth,
         password,
         confirmPassword,
+        mobile
       } = req.body;
 
       if (!name || !email || !password || !confirmPassword || !dateOfBirth) {
@@ -359,9 +387,6 @@ router.post(
         });
       }
 
-      // ----------------------
-      // Cloudinary Upload Helper
-      // ----------------------
       const uploadToCloudinary = (
         buffer: Buffer,
         folder: string
@@ -402,7 +427,7 @@ router.post(
             name,
             email,
             dob: new Date(dateOfBirth),
-            mobile: `rider_${Date.now()}`, // ⚠ consider making mobile optional in schema
+            mobile: mobile,
             passwordHash: hashedPassword,
             role: "RIDER",
             isProfileComplete: true,
@@ -434,7 +459,268 @@ router.post(
 );
 
 
+// ─────────────────────────────────────────────
+// RIDER LOGIN
+// POST /api/auth/rider/login
+// ─────────────────────────────────────────────
+/**
+ * @swagger
+ * /api/auth/rider/login:
+ *   post:
+ *     summary: Rider Login
+ *     description: Login for an approved rider.
+ *     tags:
+ *       - Rider Auth
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       '200':
+ *         description: OK (Returns JWT token and profile)
+ *       '403':
+ *         description: Forbidden (Rider is not APPROVED)
+ */
+router.post("/rider/login", async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password)
+      return res.status(400).json({ message: "Email and password required" });
+
+    const user = await prisma.user.findFirst({
+      where: { email, role: "RIDER" },
+    });
+
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const isValid = verifyPassword(password, user.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Check rider record and APPROVED status
+    const rider = await prisma.rider.findUnique({ where: { userId: user.id } });
+    if (!rider) {
+      return res.status(404).json({ message: "Rider profile not found" });
+    }
+
+    if (rider.status !== "APPROVED") {
+      return res.status(403).json({
+        message: `Rider account is ${rider.status.toLowerCase()}. Please wait for admin approval.`,
+        status: rider.status,
+      });
+    }
+
+    const token = generateToken(
+      user.id,
+      { role: "RIDER", purpose: "access" },
+      { expiresIn: "30d" }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      rider: {
+        id: rider.id,
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        phone: rider.phone,
+        status: rider.status,
+        commissionPercent: rider.commissionPercent,
+        walletBalance: rider.walletBalance,
+        totalBookings: rider.totalBookings,
+        rating: rider.rating,
+      },
+    });
+  } catch (error) {
+    console.error("Rider Login Error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+router.get("/rider/profile", authMiddleware(["RIDER"]), async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const rider = await prisma.rider.findUnique({
+      where: { userId },
+      include: { user: true },
+    });
+
+    res.status(200).json({ rider });
+  } catch (error) {
+    console.error("Rider Profile Fetch Error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+// ─────────────────────────────────────────────
+router.patch(
+  "/rider/profile",
+  authMiddleware(["RIDER"]),
+  async (req: any, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { name, phone, dob } = req.body;
+
+      // Update user fields
+      const userUpdate: any = {};
+      if (name !== undefined) userUpdate.name = name;
+      if (dob !== undefined) userUpdate.dob = new Date(dob);
 
 
+      const riderUpdate: any = {};
+      if (phone !== undefined) riderUpdate.phone = phone;
+
+      const [updatedUser, updatedRider] = await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: userUpdate,
+          select: { id: true, name: true, email: true, dob: true, mobile: true },
+        }),
+        prisma.rider.update({
+          where: { userId },
+          data: riderUpdate,
+          select: {
+            id: true,
+            phone: true,
+            status: true,
+            commissionPercent: true,
+            walletBalance: true,
+            rating: true,
+            totalBookings: true,
+          },
+        }),
+      ]);
+
+      return res.json({
+        success: true,
+        message: "Profile updated",
+        user: updatedUser,
+        rider: updatedRider,
+      });
+    } catch (error) {
+      console.error("Rider Profile Edit Error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+// ─────────────────────────────────────────────
+// RIDER FORGOT PASSWORD
+// POST /api/auth/rider/forgot-password
+// ─────────────────────────────────────────────
+router.post("/rider/forgot-password", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await prisma.user.findFirst({ where: { email, role: "RIDER" } });
+
+    // Always return 200 to prevent email enumeration
+    if (!user) {
+      return res.json({ message: "If that email exists, a reset link has been sent." });
+    }
+
+    // Generate a secure random token
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: tokenHash,
+        passwordResetExpires: expires,
+      },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/rider/reset-password?token=${rawToken}`;
+
+    await sendEmail({
+      to: user.email!,
+      subject: "Reset Your Password – Lab App",
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>Hello ${user.name || "Rider"},</p>
+        <p>You requested a password reset. Click the link below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+        <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#4F46E5;color:#fff;text-decoration:none;border-radius:6px;">Reset Password</a>
+        <p>If you did not request this, please ignore this email.</p>
+      `,
+    });
+
+    return res.json({ message: "If that email exists, a reset link has been sent." });
+  } catch (error) {
+    console.error("Rider Forgot Password Error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────────────────
+// RIDER RESET PASSWORD
+// POST /api/auth/rider/reset-password
+// ─────────────────────────────────────────────
+router.post("/rider/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password, confirmPassword } = req.body;
+
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({ message: "token, password, and confirmPassword are required" });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    // Hash the incoming raw token to compare with stored hash
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetToken: tokenHash,
+        passwordResetExpires: { gt: new Date() },
+        role: "RIDER",
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Token is invalid or has expired" });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: hashPassword(password),
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+
+    return res.json({ success: true, message: "Password reset successfully. You can now log in." });
+  } catch (error) {
+    console.error("Rider Reset Password Error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 export default router;

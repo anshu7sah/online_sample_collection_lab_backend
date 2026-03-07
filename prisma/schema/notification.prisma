@@ -1,0 +1,35 @@
+model Notification {
+    id          Int       @id @default(autoincrement())
+    title       String
+    body        String
+    scheduledAt DateTime? // null = publish immediately; future = scheduled
+
+    // NULL = generic (broadcast to all users)
+    // Set  = user-specific (e.g. booking confirmed, report ready)
+    userId Int?
+    user   User? @relation("UserSpecificNotifications", fields: [userId], references: [id])
+
+    // Optional booking link for user-specific notifications
+    bookingId Int?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    reads NotificationRead[]
+
+    @@index([userId])
+    @@index([bookingId])
+}
+
+model NotificationRead {
+    id             Int          @id @default(autoincrement())
+    userId         Int
+    user           User         @relation(fields: [userId], references: [id])
+    notificationId Int
+    notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+    readAt DateTime @default(now())
+
+    @@unique([userId, notificationId])
+    @@index([userId])
+}

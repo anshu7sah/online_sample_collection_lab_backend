@@ -1,0 +1,15 @@
+model SavedAddress {
+    id        Int    @id @default(autoincrement())
+    userId    Int
+    user      User   @relation(fields: [userId], references: [id])
+
+    label     String  // e.g. "Home", "Office", "Other"
+    address   String
+    latitude  Float
+    longitude Float
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([userId])
+}

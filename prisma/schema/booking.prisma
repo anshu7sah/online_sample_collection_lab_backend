@@ -54,8 +54,14 @@ model Booking {
     // 🔹 Money collection tracking
     totalAmount      Decimal?
     collectionAmount Decimal? // amount rider collected
+    riderEarning     Decimal? // rider's commission = collectionAmount * commissionPercent / 100
     collectedByRider Boolean  @default(false)
     isSettled        Boolean  @default(false)
+
+    // 🔹 Coupon
+    couponId       Int?
+    coupon         Coupon?  @relation(fields: [couponId], references: [id])
+    discountAmount Decimal? // discount applied from coupon
 
     status BookingStatus @default(SCHEDULED)
     notes  String?

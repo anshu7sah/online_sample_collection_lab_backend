@@ -1,0 +1,20 @@
+enum DiscountType {
+    PERCENTAGE
+    FLAT
+}
+
+model Coupon {
+    id            Int          @id @default(autoincrement())
+    code          String       @unique
+    discountType  DiscountType @default(PERCENTAGE)
+    discountValue Float        // percent value (e.g. 10 = 10%) or flat amount (e.g. 100)
+    maxUses       Int          @default(1) // max total redemptions
+    usedCount     Int          @default(0)
+    validFrom     DateTime?
+    validUntil    DateTime?
+    isActive      Boolean      @default(true)
+
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    bookings  Booking[]
+}

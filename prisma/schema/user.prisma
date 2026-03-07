@@ -21,10 +21,17 @@ model User {
 
   isProfileComplete Boolean @default(false)
 
+  // Rider forgot-password
+  passwordResetToken   String?   @unique
+  passwordResetExpires DateTime?
+
   role Role @default(USER)
 
-  rider    Rider?
-  bookings Booking[]
+  rider          Rider?
+  bookings       Booking[]
+  savedAddresses SavedAddress[]
+  notifications  NotificationRead[]
+  specificNotifications Notification[] @relation("UserSpecificNotifications")
 
   approvedTransfers MoneyTransfer[] @relation("ApprovedTransfers")
 

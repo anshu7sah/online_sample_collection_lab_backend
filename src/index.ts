@@ -10,8 +10,14 @@ import authRouter from "./routes/auth";
 import testRouter from "./routes/test/test";
 import packageRouter from "./routes/package/package";
 import bookingRouter from "./routes/booking/index";
+import riderBookingRouter from "./routes/booking/rider";
+import adminRiderRouter from "./routes/auth/admin-riders";
+import userRouter from "./routes/user/index";
+import adminNotificationsRouter from "./routes/admin/notifications";
+import adminCouponsRouter from "./routes/admin/coupons";
 import cookieParser from "cookie-parser";
 import fileRouter from "./routes/filehandling";
+import { setupSwagger } from "./swagger";
 
 
 const app = express();
@@ -50,11 +56,19 @@ rateLimit({
 // Logger
 app.use(morgan("dev"));
 
+// Initialize Swagger Docs
+setupSwagger(app);
+
 app.use("/api/auth", authRouter);
 app.use("/api/tests", testRouter);
 app.use("/api/packages", packageRouter);
 app.use("/api/filehandling", fileRouter);
 app.use("/api/bookings", bookingRouter);
+app.use("/api/rider/bookings", riderBookingRouter);
+app.use("/api/admin", adminRiderRouter);
+app.use("/api/admin", adminNotificationsRouter);
+app.use("/api/admin", adminCouponsRouter);
+app.use("/api/user", userRouter);
 
 // ===== Routes =====
 app.get("/", (req: Request, res: Response) => {

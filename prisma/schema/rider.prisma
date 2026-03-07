@@ -21,7 +21,8 @@ model Rider {
     ratingCount   Int   @default(0)
     totalBookings Int   @default(0)
 
-    walletBalance Decimal @default(0)
+    commissionPercent Float   @default(0) // % of collectionAmount rider earns
+    walletBalance     Decimal @default(0)
 
     // Relations
     bookings       Booking[]
