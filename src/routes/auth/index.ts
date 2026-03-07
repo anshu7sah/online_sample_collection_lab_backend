@@ -586,7 +586,7 @@ router.patch(
 
 
       const riderUpdate: any = {};
-      if (phone !== undefined) riderUpdate.phone = phone;
+      if (phone !== undefined) userUpdate.mobile = phone;
 
       const [updatedUser, updatedRider] = await prisma.$transaction([
         prisma.user.update({
