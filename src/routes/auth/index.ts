@@ -538,7 +538,7 @@ router.post("/rider/login", async (req: Request, res: Response) => {
         userId: user.id,
         name: user.name,
         email: user.email,
-        phone: rider.phone,
+        phone: user.mobile,
         status: rider.status,
         commissionPercent: rider.commissionPercent,
         walletBalance: rider.walletBalance,
@@ -599,7 +599,6 @@ router.patch(
           data: riderUpdate,
           select: {
             id: true,
-            phone: true,
             status: true,
             commissionPercent: true,
             walletBalance: true,
