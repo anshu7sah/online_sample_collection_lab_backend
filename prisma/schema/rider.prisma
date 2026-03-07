@@ -10,8 +10,6 @@ model Rider {
     userId Int  @unique
     user   User @relation(fields: [userId], references: [id])
 
-    phone String?
-
     drivingLicenseUrl String?
     labDegreeUrl      String?
 
